@@ -72,7 +72,6 @@ processedCount++ is not atomic. It is actually three separate steps — read the
 
 # Code
 
-import java.util.concurrent.atomic.AtomicInteger;
 public class BankStatementBatchProcessor {
     private AtomicInteger processedCount = new AtomicInteger(0);
 
