@@ -17,6 +17,21 @@
 
 Initialize result to new ArrayList<>(), add a null check on getDueDate(), and replace > 0 with an epsilon-based comparison. 
 
+# Code
+
+public List<LoanAccount> getOverdueLoans(List<LoanAccount> accounts) {
+   List<LoanAccount> result = new ArrayList<>();
+   final double EPSILON = 0.0001;
+   for (LoanAccount account : accounts) {
+   if (account.getDueDate() != null && account.getDueDate().before(new Date())) {
+   if (account.getOutstandingBalance() > EPSILON) {
+                result.add(account);
+            }
+        }
+    }
+    return result;
+}
+
 
 # T2 Analysis - ConcurrentModificationException
 
@@ -55,6 +70,30 @@ processedCount++ is not atomic. It is actually three separate steps — read the
  Replaced the plain int processedCount field with AtomicInteger, and replaced processedCount++ with processedCount.incrementAndGet(), which performs the increment  as a single atomic operation. getProcessedCount() now returns processedCount.get().
  Thread pool and processing logic were unchanged.
 
+# Code
+
+import java.util.concurrent.atomic.AtomicInteger;
+public class BankStatementBatchProcessor {
+    private AtomicInteger processedCount = new AtomicInteger(0);
+
+    public void process(List<StatementRecord> records) throws InterruptedException {
+        ExecutorService executor = Executors.newFixedThreadPool(10);
+
+        for (StatementRecord record : records) {
+            executor.submit(() -> {
+                processRecord(record);
+                processedCount.incrementAndGet(); 
+            });
+        }
+        executor.shutdown();
+        executor.awaitTermination(5, TimeUnit.MINUTES);
+    }
+
+    public int getProcessedCount() {
+        return processedCount.get(); 
+    }
+}
+
 # T4 Analysis - Connection Leak
 
 ## Root Cause
@@ -75,6 +114,32 @@ ResultSet → PreparedStatement → Connection
 SQL query and mapRow() logic were not modified.
 
 Wrapped all three resources in try-with-resources. Java closes try-with-resources blocks in reverse declaration order automatically, so nesting the ResultSet's try block inside the Connection/PreparedStatement try block produces the required closure order: ResultSet → PreparedStatement → Connection, with no manual finally block needed. Query logic and mapRow() are unchanged.
+
+# Code
+
+public class ReportDAO {
+    private DataSource dataSource;
+    public List<ReportEntry> fetchMonthlyReport(String accountId,
+                                                  int month, int year)
+                                                  throws SQLException {
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                 "SELECT * FROM report_entries " +
+                 "WHERE account_id = ? AND MONTH(entry_date) = ? " +
+                 "AND YEAR(entry_date) = ?")) {
+            ps.setString(1, accountId);
+            ps.setInt(2, month);
+            ps.setInt(3, year);
+            try (ResultSet rs = ps.executeQuery()) {
+                List<ReportEntry> entries = new ArrayList<>();
+                while (rs.next()) {
+                    entries.add(mapRow(rs));
+                }
+                return entries;
+            }
+        }
+    }
+}
 
 # T5 — Exception Handling in DocumentValidator
 
